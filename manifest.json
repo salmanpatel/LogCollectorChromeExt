@@ -1,0 +1,17 @@
+{
+	"manifest_version": 2,
+	"name": "Record Headers",
+	"description": "This extension records HTTP headers",
+	"version": "1.0",
+	"permissions": [
+		"webRequest",
+		"<all_urls>",
+		"unlimitedStorage"
+	],
+	"background": {
+		"scripts" : ["fileWriter.js"],
+//		"scripts" : ["webheader.js","webresponseheader.js", "fileWriter.js"],
+		"persistent": true
+//		"page" : "background.html"
+	}
+}
