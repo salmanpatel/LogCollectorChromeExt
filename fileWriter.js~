@@ -1,30 +1,28 @@
 var url
 var fw
-var towrite = "New-Session" + String.fromCharCode(10)
-var reqHeaders = {"type":0,"date":1,"age":2,"protocol":3,"url":4,"method":5,"User-Agent":6,"if-none-match":7,"if-modified-since":8}
-var respHeaders= {"type":0,"status":1,"content-type":1,"content-length":2,"server":3,"cache-control":4,"pragma":5,"expires":6,"last-modified":7,"etag":8,"content-md5":9}
-var req
-var respArr
+var reqHeaders = {"type":0,"request-id":1,"protocol":2,"url":3,"method":4,"user-agent":5,"if-none-match":6,"if-modified-since":7,"timeStamp":8}
+var respHeaders= {"type":0,"request-id":1,"from-cache":2,"date":3,"age":4,"url":5,"response-code":6,"content-type":7,"content-length":8,"server":9,"cache-control":10,"pragma":11,"expires":12,"last-modified":13,"etag":14,"content-md5":15,"content-encoding":16, "status":17,"timeStamp":18}
+var reqLines = ""
+var respLines = ""
 
 function onInitFs(fs) {
 	fs.root.getFile('log.txt', {create: true}, function(fileEntry) {
 //	Create a FileWriter object for our FileEntry (log.txt).
     	fileEntry.createWriter(function(fileWriter){ 
 	fileWriter.seek(fileWriter.length);	
-	fileWriter.write(new Blob([towrite]));
-	towrite=""
+	fileWriter.write(new Blob(["New-Session" + String.fromCharCode(10)]));
       	fw=fileWriter;
      	fileWriter.onwriteend = function(e) {
-//		console.log("Write completed")
+		console.log("Write completed")
       	};
       	fileWriter.onerror = function(e) {
-		//console.log("In error")
 		console.log('Error',e)
       };
     }, errorHandler);
   }, errorHandler);
 }
-var intervalID = setInterval(saveData, 5000);
+//var reqintervalID = setInterval(saveDataReq, 2000);
+var resintervalID = setInterval(saveData, 10000);
 function errorHandler(e) {
   var msg = '';
   switch (e.name) {
@@ -54,75 +52,86 @@ window.requestFileSystem  = window.requestFileSystem || window.webkitRequestFile
 window.webkitStorageInfo.requestQuota(PERSISTENT, 1024*1024, function(grantedBytes) {
 	  window.requestFileSystem(PERSISTENT, grantedBytes, onInitFs, errorHandler);
 }, function(e) {
-//	  console.log('Error', e);
+	  console.log('Error', e);
 });
+/*function saveDataReq(){
+	var reqblob= new Blob([reqLines]);
+	fw.write(reqblob);	
+	reqLines="";
+	
+}*/
 function saveData(){
-	var blob= new Blob([towrite]);
+	var blob= new Blob([reqLines,respLines]);
 	fw.write(blob);	
-	towrite="";
+	respLines="";
+	reqLines="";
 }
 
-function headerRequired(name){
-	if(name=="status" || name=="age" || name=="version"|| name=="cache-control" || name=="content-encoding" || name=="content-type" || name=="date" || name=="expires" || name=="pragma" || name=="last-modified" || name=="content-length" || name=="content-md5" || name=="server" || name=="user-agent" || name=="if-none-match" || name=="if-modified-since"|| name=="etag"){
-		return true;
+function headerInRespDic(name) {
+	for (var key in respHeaders) {
+		if (name==key)
+			return true
 	}
-	else{
-		return false;
-	}
+	return false
 }
 
-chrome.webRequest.onBeforeSendHeaders.addListener(function(details){
-	towrite+="Q"+String.fromCharCode(9);
-	reqID=details.requestId+String.fromCharCode(9);
-	towrite+=reqID
-	ts=details.timeStamp+String.fromCharCode(9);
-	towrite+=ts
-	url=details.url+String.fromCharCode(9);
-	towrite+=url;
-	reqtype=details.type+String.fromCharCode(9);
-	towrite+=reqtype
-	httpMethod=details.method+String.fromCharCode(9);
-	towrite+=httpMethod
+function headerInReqDic(name) {
+	for (var key in reqHeaders) {
+		if (name==key)
+			return true
+	}
+	return false
+}
+
+chrome.webRequest.onSendHeaders.addListener(function(details){
+	var reqArr = new Array(Object.keys(reqHeaders).length)
+	for (var i = reqArr.length-1; i >= 0; -- i) reqArr[i] = ""
+	reqArr[reqHeaders["type"]] = "Q" ;
+	reqArr[reqHeaders["request-id"]] = details.requestId;
+	reqArr[reqHeaders["timeStamp"]] = details.timeStamp;
+	var temp = reqArr[reqHeaders["url"]] = details.url;
+//	console.log(temp)
+	reqArr[reqHeaders["method"]] = details.method;
+	if (temp.charAt(4) == 's')
+		reqArr[reqHeaders["protocol"]] = temp.substring(0, 5);
+	else
+		reqArr[reqHeaders["protocol"]] = temp.substring(0, 4);
 	headers=details.requestHeaders;
 	for (var i = 0, l = headers.length; i < l; ++i ){
-		if(headerRequired(headers[i].name.toLowerCase())){
-			towrite+="NAME: "+headers[i].name;
-			towrite+=String.fromCharCode(9);	
-			towrite+="VALUE: "+(headers[i].value);
-			towrite+=String.fromCharCode(9);	
-		}
+		if(headers[i].name.toLowerCase()=="if-modified-since" || headers[i].name.toLowerCase()=="if-none-match"){
+//		console.log(headers[i].name)
+//		console.log(headers[i].value)}
+
+		if(headerInReqDic(headers[i].name.toLowerCase())){
+			reqArr[reqHeaders[headers[i].name.toLowerCase()]] = headers[i].value;
+		}	
 	}
-	towrite+=String.fromCharCode(10)
+	reqLines += reqArr.join(String.fromCharCode(9));
+	reqLines += String.fromCharCode(10)
 },
 {urls: ["<all_urls>"]},["requestHeaders"]);
 
-chrome.webRequest.onResponseStarted.addListener(onResponse, {urls: ["<all_urls>"]},["responseHeaders"]);
+chrome.webRequest.onCompleted.addListener(onResponse, {urls: ["<all_urls>"]},["responseHeaders"]);
 chrome.webRequest.onBeforeRedirect.addListener(onResponse, {urls: ["<all_urls>"]},["responseHeaders"]);
 
 function onResponse(details){
-	towrite+="S"+String.fromCharCode(9);
-	reqID=details.requestId+String.fromCharCode(9);
-	towrite+=reqID
-	ts=details.timeStamp+String.fromCharCode(9);
-	towrite+=ts
-	url=details.url+String.fromCharCode(9);
-	towrite+=url;
-	httpMethod=details.method+String.fromCharCode(9);
-	towrite+=httpMethod
-	statuscode=details.statusCode+String.fromCharCode(9);
-	towrite+=statuscode
-	statusline=details.statusLine+String.fromCharCode(9);
-	towrite+=statusline
-	fc=details.fromCache + String.fromCharCode(9);
-	towrite+=fc
+	var respArr = new Array(Object.keys(respHeaders).length);
+	for (var i = respArr.length-1; i >= 0; -- i) respArr[i] = "";
+	respArr[respHeaders["type"]] = "S";
+	respArr[respHeaders["request-id"]] = details.requestId;
+	respArr[respHeaders["timeStamp"]] = details.timeStamp;
+	respArr[respHeaders["url"]] = details.url;
+	respArr[respHeaders["response-code"]] = details.statusCode + details.statusLine;
+	respArr[respHeaders["from-cache"]] = details.fromCache;
 	headers=details.responseHeaders;
+	
 	for (var i = 0, l = headers.length; i < l; ++i ){
-		if(headerRequired(headers[i].name.toLowerCase())){
-			towrite+="NAME:"+headers[i].name;
-			towrite+=String.fromCharCode(9);	
-			towrite+="VALUE:"+(headers[i].value);
-			towrite+=String.fromCharCode(9);
+	//	console.log(headers[i].name)
+	//	console.log(headers[i].value)
+		if(headerInRespDic(headers[i].name.toLowerCase())){
+			respArr[respHeaders[headers[i].name.toLowerCase()]] = headers[i].value;
 		}	
 	}
-	towrite+=String.fromCharCode(10)
+	respLines += respArr.join(String.fromCharCode(9));
+	respLines += String.fromCharCode(10)
 }
